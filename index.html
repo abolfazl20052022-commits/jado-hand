@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="fa">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Doctor Strange Hand Magic</title>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #000;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+        #webcam {
+            display: none;
+        }
+        #output_canvas {
+            width: 100vw;
+            height: 100vh;
+            object-fit: cover;
+            transform: scaleX(-1);
+        }
+        #loading {
+            position: absolute;
+            color: #00ffcc;
+            font-family: sans-serif;
+            font-size: 22px;
+            text-shadow: 0 0 10px #00ffcc;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="loading">در حال احضار جادوی دکتر استرنج...</div>
+    <video id="webcam" autoplay playsinline></video>
+    <canvas id="output_canvas"></canvas>
+
+    <script>
+        const videoElement = document.getElementById('webcam');
+        const canvasElement = document.getElementById('output_canvas');
+        const canvasCtx = canvasElement.getContext('2d');
+        const loadingElement = document.getElementById('loading');
+
+        let rotationAngle = 0; // زاویه چرخش حلقه‌های جادو
+
+        function resizeCanvas() {
+            canvasElement.width = window.innerWidth;
+            canvasElement.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        // تابع برای رسم سپر جادویی متحرک و درخشان
+        function drawMagicShield(ctx, x, y, radius) {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.rotate(rotationAngle);
+
+            // استایل نئونی جادو (رنگ پرتقالی/آتشین جادوی دکتر استرنج)
+            const magicColor = "#ff6a00";
+            ctx.strokeStyle = magicColor;
+            ctx.shadowColor = magicColor;
+            ctx.shadowBlur = 20;
+            ctx.lineWidth = 3;
+
+            // ۱. حلقه بیرونی ضخیم
+            ctx.beginPath();
+            ctx.arc(0, 0, radius, 0, Math.PI * 2);
+            ctx.stroke();
+
+            // ۲. حلقه داخلی نقطه‌چین
+            ctx.save();
+            ctx.setLineDash([6, 6]);
+            ctx.beginPath();
+            ctx.arc(0, 0, radius * 0.8, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.restore();
+
+            // ۳. رسم مثلث‌های متقاطع داخل حلقه (ستاره جادویی)
+            ctx.beginPath();
+            for (let i = 0; i < 3; i++) {
+                let angle = (i * Math.PI * 2) / 3;
+                let tx = Math.cos(angle) * radius;
+                let ty = Math.sin(angle) * radius;
+                if (i === 0) ctx.moveTo(tx, ty);
+                else ctx.lineTo(tx, ty);
+            }
+            ctx.closePath();
+            ctx.stroke();
+
+            ctx.beginPath();
+            for (let i = 0; i < 3; i++) {
+                let angle = (i * Math.PI * 2) / 3 + Math.PI; // برعکس کردن مثلث دوم
+                let tx = Math.cos(angle) * radius;
+                let ty = Math.sin(angle) * radius;
+                if (i === 0) ctx.moveTo(tx, ty);
+                else ctx.lineTo(tx, ty);
+            }
+            ctx.closePath();
+            ctx.stroke();
+
+            // ۴. دایره مرکز جادو
+            ctx.beginPath();
+            ctx.arc(0, 0, radius * 0.3, 0, Math.PI * 2);
+            ctx.fillStyle = "rgba(255, 106, 0, 0.2)";
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.restore();
+        }
+
+        // بررسی باز بودن کف دست
+        function isPalmOpen(landmarks) {
+            // مقایسه فاصله نوک انگشتان با بندهای پایینی؛ اگر بالاتر باشند یعنی دست باز است
+            const tips = [8, 12, 16, 20];
+            const pips = [6, 10, 14, 18];
+            
+            for(let i=0; i<tips.length; i++) {
+                if(landmarks[tips[i]].y > landmarks[pips[i]].y) {
+                    return false; // حداقل یک انگشت بسته است
+                }
+            }
+            return true;
+        }
+
+        function onResults(results) {
+            loadingElement.style.display = 'none';
+            canvasCtx.save();
+            canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+            canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+
+            // انیمیشن چرخش جادو
+            rotationAngle += 0.02;
+
+            if (results.multiHandLandmarks) {
+                for (const landmarks of results.multiHandLandmarks) {
+                    
+                    // اگر کف دست باز بود، جادو رو ظاهر کن
+                    if (isPalmOpen(landmarks)) {
+                        // نقطه ۹ مرکز کف دست است
+                        const palmCenter = landmarks[9];
+                        const x = palmCenter.x * canvasElement.width;
+                        const y = palmCenter.y * canvasElement.height;
+
+                        // محاسبه اندازه سپر بر اساس فاصله مچ (نقطه ۰) تا مرکز دست (نقطه ۹)
+                        const wrist = landmarks[0];
+                        const dx = (palmCenter.x - wrist.x) * canvasElement.width;
+                        const dy = (palmCenter.y - wrist.y) * canvasElement.height;
+                        const distance = Math.sqrt(dx*dx + dy*dy);
+                        const shieldRadius = distance * 1.2; // اندازه سپر جادو
+
+                        // رسم افکت
+                        drawMagicShield(canvasCtx, x, y, shieldRadius);
+                    }
+                }
+            }
+            canvasCtx.restore();
+        }
+
+        const hands = new Hands({
+            locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+        });
+
+        hands.setOptions({
+            maxNumHands: 2,
+            modelComplexity: 1,
+            minDetectionConfidence: 0.7,
+            minTrackingConfidence: 0.7
+        });
+
+        hands.onResults(onResults);
+
+        const camera = new Camera(videoElement, {
+            onFrame: async () => {
+                await hands.send({image: videoElement});
+            },
+            width: 640,
+            height: 480
+        });
+        camera.start();
+    </script>
+</body>
+</html>
